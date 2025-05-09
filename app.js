@@ -11,16 +11,16 @@ const app = express();
 // Middleware
 const allowedOrigins = ['http://localhost:5173', 'https://trivshopy.shop'];
 
-app.options('*', cors({
+app.use(cors({
   origin: function (origin, callback) {
+    // If there's no origin (for non-browser requests like curl), allow it
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true
 }));
 
@@ -36,11 +36,15 @@ const secondaryCategoryRoutes = require("./routes/secondaryCategoryRoutes");
 const tertiaryCategoryRoutes = require("./routes/tertiaryCategoryRoutes");
 const productRoutes = require("./routes/productRoutes");
 
+
 app.use('/api/auth', authRoutes);
 app.use("/api/primary-categories", primaryCategoryRoutes);
 app.use("/api/secondary-categories", secondaryCategoryRoutes);
 app.use("/api/tertiary-categories", tertiaryCategoryRoutes);
 app.use("/api/products", productRoutes);
+
+
+
 
 // Test Route
 app.get('/', (req, res) => {
