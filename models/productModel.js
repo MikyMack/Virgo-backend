@@ -23,8 +23,10 @@ const productSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 
   primaryCategory: { type: mongoose.Schema.Types.ObjectId, ref: "PrimaryCategory", required: true },
-  secondaryCategory: { type: mongoose.Schema.Types.ObjectId, ref: "SecondaryCategory", required: true },
-  tertiaryCategory: { type: mongoose.Schema.Types.ObjectId, ref: "TertiaryCategory", required: true },
+  
+  // Make secondary and tertiary categories optional
+  secondaryCategory: { type: mongoose.Schema.Types.ObjectId, ref: "SecondaryCategory", required: false },
+  tertiaryCategory: { type: mongoose.Schema.Types.ObjectId, ref: "TertiaryCategory", required: false },
 
   fragrance: String,
   specifications: String,

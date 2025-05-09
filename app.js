@@ -13,7 +13,6 @@ const allowedOrigins = ['http://localhost:5173', 'https://trivshopy.shop'];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // If there's no origin (for non-browser requests like curl), allow it
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
