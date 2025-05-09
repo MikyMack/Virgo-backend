@@ -7,7 +7,7 @@ const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const app = express();
-
+app.options('*', cors());
 // Middleware
 const allowedOrigins = ['http://localhost:5173', 'https://trivshopy.shop'];
 
@@ -19,7 +19,9 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow methods
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'], // Allow specific headers
+  credentials: true, // Enable cookies, if necessary
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
