@@ -11,7 +11,7 @@ const app = express();
 // Middleware
 const allowedOrigins = ['http://localhost:5173', 'https://trivshopy.shop'];
 
-app.use(cors({
+app.options('*', cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -19,12 +19,11 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow methods
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'], // Allow specific headers
-  credentials: true, // Enable cookies, if necessary
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
 }));
 
-app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
