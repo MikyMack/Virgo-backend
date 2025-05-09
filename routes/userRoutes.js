@@ -9,4 +9,4 @@ router.get("/admin-data", protect, adminOnly, async (req, res) => {
   res.json({ message: "Admin-only content" });
 });
 
-router.get('user-profile', protect , getUser);
+router.get('/user-profile', protect , getUser);
