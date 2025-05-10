@@ -1,19 +1,114 @@
 // backend/controllers/productController.js
 const Product = require("../models/productModel");
 const cloudinary = require("../utils/cloudinary");
+const { promisify } = require('util');
 
 // Upload to Cloudinary helper function
-const uploadToCloudinary = async (fileBuffer) => {
-  return await cloudinary.uploader.upload_stream({ resource_type: "image" }, (error, result) => {
-    if (error) throw error;
-    return result;
-  });
+const uploadToCloudinary = async (file) => {
+  try {
+    // Convert buffer to base64
+    const b64 = Buffer.from(file.buffer).toString("base64");
+    let dataURI = "data:" + file.mimetype + ";base64," + b64;
+    
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: "products" 
+    });
+    return result.secure_url;
+  } catch (error) {
+    throw new Error("Cloudinary upload failed: " + error.message);
+  }
 };
 
 // Create Product Controller
 exports.createProduct = async (req, res) => {
   try {
+    // Validate required fields
+    if (!req.body.name || !req.body.basePrice || !req.body.primaryCategory) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Parse incoming data
     const {
+      name,
+      description,
+      brand,
+      basePrice,
+      baseStock,
+      isActive = true,
+      primaryCategory,
+      secondaryCategory,
+      tertiaryCategory,
+      fragrance,
+      specifications,
+      careAndMaintenance,
+      warranty,
+      qna = '[]',
+      variants = '[]',
+    } = req.body;
+
+    // Parse JSON strings safely
+    let parsedVariants, parsedQna;
+    try {
+      parsedVariants = JSON.parse(variants);
+      parsedQna = JSON.parse(qna);
+    } catch (parseError) {
+      return res.status(400).json({ message: "Invalid JSON in variants or Q&A" });
+    }
+
+    // Upload main images
+    const images = [];
+    if (req.files?.images) {
+      for (const file of req.files.images) {
+        try {
+          // Upload from buffer since we're using memoryStorage
+          const result = await cloudinaryUpload(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
+            folder: 'products'
+          });
+          images.push(result.secure_url);
+        } catch (uploadError) {
+          console.error('Image upload failed:', uploadError);
+          return res.status(500).json({ message: "Failed to upload product images" });
+        }
+      }
+    }
+
+    // Upload variant images
+    const variantImages = [];
+    if (req.files?.variantImages) {
+      for (const file of req.files.variantImages) {
+        try {
+          // Upload from buffer
+          const result = await cloudinaryUpload(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
+            folder: 'products/variants'
+          });
+          variantImages.push(result.secure_url);
+        } catch (uploadError) {
+          console.error('Variant image upload failed:', uploadError);
+          return res.status(500).json({ message: "Failed to upload variant images" });
+        }
+      }
+    }
+
+    // Validate variant images match variants
+    if (parsedVariants.length > 0 && parsedVariants.length !== variantImages.length) {
+      return res.status(400).json({ 
+        message: "Variant images count doesn't match variants count",
+        variantsCount: parsedVariants.length,
+        imagesCount: variantImages.length
+      });
+    }
+
+    // Prepare final variants
+    const finalVariants = parsedVariants.map((variant, idx) => ({
+      ...variant,
+      image: variantImages[idx] || null,
+      price: variant.price || basePrice,
+      stock: variant.stock || baseStock,
+    }));
+
+    // Create product
+    const product = await Product.create({
       name,
       description,
       brand,
@@ -27,81 +122,26 @@ exports.createProduct = async (req, res) => {
       specifications,
       careAndMaintenance,
       warranty,
-      qna,
-      variants, // JSON string from client
-    } = req.body;
-
-    // Parse variant array and Q&A
-    const parsedVariants = variants ? JSON.parse(variants) : [];
-    const parsedQna = qna ? JSON.parse(qna) : [];
-
-    const images = [];
-    const variantImages = [];
-
-    // 1. Upload main product images
-    if (req.files?.images) {
-      for (const file of req.files.images) {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: "image" },
-          (err, result) => {
-            if (err) throw err;
-            images.push(result.secure_url);
-          }
-        ).end(file.buffer);
-      }
-    }
-
-    // 2. Upload variant images
-    if (req.files?.variantImages) {
-      for (const file of req.files.variantImages) {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: "image" },
-          (err, result) => {
-            if (err) throw err;
-            variantImages.push(result.secure_url);
-          }
-        ).end(file.buffer);
-      }
-    }
-
-    // 3. Map variants with their image
-    const finalVariants = parsedVariants.map((variant, idx) => ({
-      ...variant,
-      image: variantImages[idx],
-    }));
-
-    // Prepare product data
-    const productData = {
-      name,
-      description,
-      brand,
-      basePrice,
-      baseStock,
-      isActive,
-      primaryCategory,
-      fragrance,
-      specifications,
-      careAndMaintenance,
-      warranty,
       qna: parsedQna,
       variants: finalVariants,
       images,
-    };
+    });
 
-    // Add secondary and tertiary categories if provided
-    if (secondaryCategory) productData.secondaryCategory = secondaryCategory;
-    if (tertiaryCategory) productData.tertiaryCategory = tertiaryCategory;
+    res.status(201).json({ 
+      success: true,
+      message: "Product created successfully",
+      product 
+    });
 
-    const product = new Product(productData);
-    await product.save();
-
-    res.status(201).json({ message: "Product created", product });
   } catch (error) {
-    console.error("Product Create Error:", error);
-    res.status(500).json({ message: "Internal Server Error", error });
+    console.error("Product creation error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
-
 // Get all products Controller
 exports.getAllProducts = async (req, res) => {
   try {
