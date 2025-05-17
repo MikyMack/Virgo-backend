@@ -4,21 +4,18 @@ const cloudinary = require("../utils/cloudinary");
 const { promisify } = require('util');
 
 // Upload to Cloudinary helper function
-const uploadToCloudinary = async (file) => {
+const cloudinaryUpload = async (file, options = {}) => {
   try {
-    // Convert buffer to base64
     const b64 = Buffer.from(file.buffer).toString("base64");
-    let dataURI = "data:" + file.mimetype + ";base64," + b64;
-    
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: "products" 
-    });
-    return result.secure_url;
+    const dataURI = `data:${file.mimetype};base64,${b64}`;
+
+    const result = await cloudinary.uploader.upload(dataURI, options);
+    return result;
   } catch (error) {
     throw new Error("Cloudinary upload failed: " + error.message);
   }
 };
+
 
 // Create Product Controller
 exports.createProduct = async (req, res) => {
@@ -62,9 +59,8 @@ exports.createProduct = async (req, res) => {
       for (const file of req.files.images) {
         try {
           // Upload from buffer since we're using memoryStorage
-          const result = await cloudinaryUpload(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
-            folder: 'products'
-          });
+          const result = await cloudinaryUpload(file, { folder: 'products' });
+
           images.push(result.secure_url);
         } catch (uploadError) {
           console.error('Image upload failed:', uploadError);
@@ -79,9 +75,8 @@ exports.createProduct = async (req, res) => {
       for (const file of req.files.variantImages) {
         try {
           // Upload from buffer
-          const result = await cloudinaryUpload(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
-            folder: 'products/variants'
-          });
+          const result = await cloudinaryUpload(file, { folder: 'products/variants' });
+
           variantImages.push(result.secure_url);
         } catch (uploadError) {
           console.error('Variant image upload failed:', uploadError);
@@ -158,7 +153,7 @@ exports.getAllProducts = async (req, res) => {
 // Get a specific product Controller
 exports.getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId)
+    const product = await Product.findById(req.params.id)
       .populate("primaryCategory secondaryCategory tertiaryCategory"); // Populate category details
 
     if (!product) {
@@ -275,7 +270,7 @@ exports.updateProduct = async (req, res) => {
 // Delete Product Controller
 exports.deleteProduct = async (req, res) => {
   try {
-    const deletedProduct = await Product.findByIdAndDelete(req.params.productId);
+    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
 
     if (!deletedProduct) {
       return res.status(404).json({ message: "Product not found" });
@@ -291,7 +286,7 @@ exports.deleteProduct = async (req, res) => {
 // Toggle Product Active/Inactive Status Controller
 exports.toggleProductStatus = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
