@@ -5,7 +5,7 @@ const variantSchema = new mongoose.Schema({
   size: { type: String },
   price: { type: Number, required: true },
   stock: { type: Number, required: true },
-  image: { type: String, required: true },
+  image: { type: String, required: false },
 }, { _id: false });
 
 const qnaSchema = new mongoose.Schema({

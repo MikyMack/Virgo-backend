@@ -170,6 +170,13 @@ exports.getProductById = async (req, res) => {
 // Update Product Controller
 exports.updateProduct = async (req, res) => {
   try {
+    if (!req.params.id) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Product ID is required" 
+      });
+    }
+
     const {
       name,
       description,
@@ -185,49 +192,82 @@ exports.updateProduct = async (req, res) => {
       careAndMaintenance,
       warranty,
       qna,
-      variants, // JSON string from client
+      variants,
     } = req.body;
 
-    // Parse variant array and Q&A
-    const parsedVariants = variants ? JSON.parse(variants) : [];
-    const parsedQna = qna ? JSON.parse(qna) : [];
-
-    const images = [];
-    const variantImages = [];
-
-    // 1. Upload main product images if present
-    if (req.files?.images) {
-      for (const file of req.files.images) {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: "image" },
-          (err, result) => {
-            if (err) throw err;
-            images.push(result.secure_url);
-          }
-        ).end(file.buffer);
-      }
+    if (!name || !basePrice || !primaryCategory) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, base price and primary category are required"
+      });
     }
 
-    // 2. Upload variant images if present
-    if (req.files?.variantImages) {
-      for (const file of req.files.variantImages) {
-        const result = await cloudinary.uploader.upload_stream(
-          { resource_type: "image" },
-          (err, result) => {
-            if (err) throw err;
-            variantImages.push(result.secure_url);
-          }
-        ).end(file.buffer);
-      }
+    let parsedVariants = [];
+    let parsedQna = [];
+    try {
+      parsedVariants = variants ? JSON.parse(variants) : [];
+      parsedQna = qna ? JSON.parse(qna) : [];
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid JSON format for variants or qna"
+      });
     }
 
-    // 3. Map variants with their image
-    const finalVariants = parsedVariants.map((variant, idx) => ({
-      ...variant,
-      image: variantImages[idx],
-    }));
+    const existingProduct = await Product.findById(req.params.id);
+    if (!existingProduct) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
 
-    // Prepare product update data
+    let images = existingProduct.images || [];
+    let variantImages = [];
+
+    try {
+      if (req.files?.images?.length > 0) {
+        images = await Promise.all(
+          req.files.images.map(file => cloudinaryUpload(file))
+        ).then(results => results.map(r => r.secure_url));
+      }
+
+      if (req.files?.variantImages?.length > 0) {
+        variantImages = await Promise.all(
+          req.files.variantImages.map(file => cloudinaryUpload(file))
+        ).then(results => results.map(r => r.secure_url));
+      }
+    } catch (uploadError) {
+      return res.status(500).json({
+        success: false,
+        message: "Error uploading images",
+        error: process.env.NODE_ENV === "development" ? uploadError.message : undefined
+      });
+    }
+
+    // Map variants with images and fallback to existing variant images if missing
+    const finalVariants = parsedVariants.map((variant, idx) => {
+      let image = variantImages[idx] || variant.image;
+      if (!image && existingProduct.variants && existingProduct.variants[idx]) {
+        image = existingProduct.variants[idx].image;
+      }
+
+      if (!image) {
+        console.warn(`Missing image for variant at index ${idx}`);
+      }
+
+      return { ...variant, image };
+    });
+
+    // Validate that all variants have images
+    const missingImageIndex = finalVariants.findIndex(v => !v.image);
+    if (missingImageIndex !== -1) {
+      return res.status(400).json({
+        success: false,
+        message: `Image is required for variant at index ${missingImageIndex}`
+      });
+    }
+
     const productData = {
       name,
       description,
@@ -245,27 +285,32 @@ exports.updateProduct = async (req, res) => {
       images,
     };
 
-    // Add secondary and tertiary categories if provided
     if (secondaryCategory) productData.secondaryCategory = secondaryCategory;
     if (tertiaryCategory) productData.tertiaryCategory = tertiaryCategory;
 
-    // Update the product in the database
     const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.productId,
+      req.params.id,
       productData,
       { new: true, runValidators: true }
     ).populate("primaryCategory secondaryCategory tertiaryCategory");
 
-    if (!updatedProduct) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      product: updatedProduct
+    });
 
-    res.status(200).json({ message: "Product updated", updatedProduct });
   } catch (error) {
     console.error("Error updating product:", error);
-    res.status(500).json({ message: "Internal Server Error", error });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
   }
 };
+
+
 
 // Delete Product Controller
 exports.deleteProduct = async (req, res) => {
