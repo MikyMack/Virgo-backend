@@ -171,9 +171,9 @@ exports.getProductById = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     if (!req.params.id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Product ID is required" 
+        message: "Product ID is required",
       });
     }
 
@@ -198,7 +198,7 @@ exports.updateProduct = async (req, res) => {
     if (!name || !basePrice || !primaryCategory) {
       return res.status(400).json({
         success: false,
-        message: "Name, base price and primary category are required"
+        message: "Name, base price and primary category are required",
       });
     }
 
@@ -207,67 +207,90 @@ exports.updateProduct = async (req, res) => {
     try {
       parsedVariants = variants ? JSON.parse(variants) : [];
       parsedQna = qna ? JSON.parse(qna) : [];
-    } catch {
+    } catch (err) {
       return res.status(400).json({
         success: false,
-        message: "Invalid JSON format for variants or qna"
+        message: "Invalid JSON format for variants or qna",
       });
     }
 
+    // Fetch existing product
     const existingProduct = await Product.findById(req.params.id);
     if (!existingProduct) {
       return res.status(404).json({
         success: false,
-        message: "Product not found"
+        message: "Product not found",
       });
     }
 
+    // === Upload images ===
     let images = existingProduct.images || [];
     let variantImages = [];
 
     try {
       if (req.files?.images?.length > 0) {
         images = await Promise.all(
-          req.files.images.map(file => cloudinaryUpload(file))
-        ).then(results => results.map(r => r.secure_url));
+          req.files.images.map((file) => cloudinaryUpload(file, { folder: 'products' }))
+        ).then((results) => results.map((r) => r.secure_url));
       }
 
       if (req.files?.variantImages?.length > 0) {
         variantImages = await Promise.all(
-          req.files.variantImages.map(file => cloudinaryUpload(file))
-        ).then(results => results.map(r => r.secure_url));
+          req.files.variantImages.map((file) =>
+            cloudinaryUpload(file, { folder: 'products/variants' })
+          )
+        ).then((results) => results.map((r) => r.secure_url));
       }
     } catch (uploadError) {
+      console.error("Image upload failed:", uploadError);
       return res.status(500).json({
         success: false,
         message: "Error uploading images",
-        error: process.env.NODE_ENV === "development" ? uploadError.message : undefined
+        error: process.env.NODE_ENV === "development" ? uploadError.message : undefined,
       });
     }
 
-    // Map variants with images and fallback to existing variant images if missing
+    // === Robust variant matching ===
+    // Build existing variant map by "color-size"
+    const existingVariantMap = {};
+    (existingProduct.variants || []).forEach((v) => {
+      const key = `${v.color || ''}-${v.size || ''}`;
+      existingVariantMap[key] = v;
+    });
+
+    // Build final variants with fallback
     const finalVariants = parsedVariants.map((variant, idx) => {
-      let image = variantImages[idx] || variant.image;
-      if (!image && existingProduct.variants && existingProduct.variants[idx]) {
-        image = existingProduct.variants[idx].image;
+      const key = `${variant.color || ''}-${variant.size || ''}`;
+      const existing = existingVariantMap[key];
+
+      let image = null;
+
+      // Priority: uploaded new image
+      if (variantImages[idx]) {
+        image = variantImages[idx];
+      }
+      // Next: image sent directly in request variant
+      else if (variant.image) {
+        image = variant.image;
+      }
+      // Next: fallback to existing stored variant
+      else if (existing) {
+        image = existing.image;
       }
 
       if (!image) {
-        console.warn(`Missing image for variant at index ${idx}`);
+        throw new Error(`Image is required for variant with key: ${key}`);
       }
 
-      return { ...variant, image };
+      return {
+        ...variant,
+        price: variant.price || basePrice,
+        stock: variant.stock || baseStock,
+        image,
+      };
     });
 
-    // Validate that all variants have images
-    const missingImageIndex = finalVariants.findIndex(v => !v.image);
-    if (missingImageIndex !== -1) {
-      return res.status(400).json({
-        success: false,
-        message: `Image is required for variant at index ${missingImageIndex}`
-      });
-    }
-
+    // === Prepare product data ===
     const productData = {
       name,
       description,
@@ -288,6 +311,7 @@ exports.updateProduct = async (req, res) => {
     if (secondaryCategory) productData.secondaryCategory = secondaryCategory;
     if (tertiaryCategory) productData.tertiaryCategory = tertiaryCategory;
 
+    // === Update the product ===
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       productData,
@@ -297,7 +321,7 @@ exports.updateProduct = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Product updated successfully",
-      product: updatedProduct
+      product: updatedProduct,
     });
 
   } catch (error) {
@@ -305,11 +329,10 @@ exports.updateProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
-
 
 
 // Delete Product Controller
