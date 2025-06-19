@@ -141,7 +141,7 @@ exports.createProduct = async (req, res) => {
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find()
-      .populate("primaryCategory secondaryCategory tertiaryCategory") // Populate category details
+      .populate("primaryCategory secondaryCategory tertiaryCategory") 
       .sort({ createdAt: -1 });
     res.status(200).json({ products });
   } catch (error) {
