@@ -370,3 +370,53 @@ exports.toggleProductStatus = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error", error });
   }
 };
+
+exports.getProductsByType = async (req, res) => {
+  const { type } = req.query; // example: ?type=featured
+
+  try {
+    let products;
+
+    switch (type) {
+      case 'featured':
+        // Example: top 10 most recently created products
+        products = await Product.find({ isActive: true })
+          .sort({ createdAt: -1 })
+          .limit(10);
+        break;
+
+      case 'best-seller':
+        // Example: products with lowest baseStock → sold the most
+        products = await Product.find({ isActive: true })
+          .sort({ baseStock: 1 })
+          .limit(10);
+        break;
+
+      case 'sales':
+        // Example: products having any variant price lower than basePrice
+        products = await Product.find({
+          isActive: true,
+          variants: { 
+            $elemMatch: { price: { $lt: "$basePrice" } }
+          }
+        });
+        // Note: Mongoose does not resolve $basePrice in query directly,
+        // so do filter in JS:
+        products = products.filter(p =>
+          p.variants.some(v => v.price < p.basePrice)
+        );
+        break;
+
+      case 'all':
+      default:
+        // All active products
+        products = await Product.find({ isActive: true });
+        break;
+    }
+
+    res.json({ success: true, products });
+  } catch (error) {
+    console.error('getProductsByType failed:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch products' });
+  }
+};
