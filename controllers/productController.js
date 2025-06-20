@@ -420,3 +420,97 @@ exports.getProductsByType = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch products' });
   }
 };
+
+exports.getShopProducts = async (req, res) => {
+  try {
+    const {
+      type = "all",    
+      primaryCategory,
+      secondaryCategory,
+      tertiaryCategory,
+      brand,
+      keyword,
+      minPrice,
+      maxPrice,
+      sortBy = "latest", 
+      page = 1,
+      limit = 12
+    } = req.query;
+
+    const query = { isActive: true };
+
+    // ✅ 1) Section type logic
+    switch (type) {
+      case "featured":
+        // Example: top 10 latest
+        // We'll apply limit after filters
+        break;
+
+      case "best-seller":
+        // We'll sort by baseStock ascending
+        break;
+
+      case "sales":
+        // Mark for post-filtering: variant price < basePrice
+        query._postFilterSales = true;
+        break;
+
+      case "all":
+      default:
+        // No additional conditions
+        break;
+    }
+
+    //  2) Filters
+    if (primaryCategory) query.primaryCategory = primaryCategory;
+    if (secondaryCategory) query.secondaryCategory = secondaryCategory;
+    if (tertiaryCategory) query.tertiaryCategory = tertiaryCategory;
+    if (brand) query.brand = brand;
+    if (keyword) query.name = { $regex: keyword, $options: "i" };
+    if (minPrice || maxPrice) {
+      query.basePrice = {};
+      if (minPrice) query.basePrice.$gte = Number(minPrice);
+      if (maxPrice) query.basePrice.$lte = Number(maxPrice);
+    }
+
+    //  3) Sorting
+    let sortQuery = { createdAt: -1 }; // default: latest
+
+    if (sortBy === "priceLowHigh") sortQuery = { basePrice: 1 };
+    else if (sortBy === "priceHighLow") sortQuery = { basePrice: -1 };
+    else if (sortBy === "nameAZ") sortQuery = { name: 1 };
+    else if (type === "best-seller") sortQuery = { baseStock: 1 };
+    else if (type === "featured") sortQuery = { createdAt: -1 };
+
+    // ✅ 4) Find
+    let products = await Product.find(query)
+      .sort(sortQuery)
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    //  5) Post filter for sales (price drop)
+    if (query._postFilterSales) {
+      products = products.filter(p =>
+        p.variants.some(v => v.price < p.basePrice)
+      );
+    }
+
+    //  6) Total count (for pagination)
+    const total = await Product.countDocuments({ ...query, _postFilterSales: undefined });
+
+    res.json({
+      success: true,
+      products,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error("getShopProducts error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch products", error: error.message });
+  }
+};

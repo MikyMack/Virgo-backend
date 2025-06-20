@@ -8,7 +8,8 @@ const {
   toggleProductStatus,
   getAllProducts,
   getProductById,
-  getProductsByType
+  getProductsByType,
+  getShopProducts
 } = require("../controllers/productController");
 
 router.post(
@@ -34,6 +35,8 @@ router.delete("/delete/:id", deleteProduct);
 router.patch("/toggle/:id", toggleProductStatus);
 
 router.get("/", getAllProducts);
+
+router.get("/shopProducts", getShopProducts);
 
 router.get('/AllProducts', getProductsByType);
 
