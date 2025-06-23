@@ -34,6 +34,7 @@ const primaryCategoryRoutes = require("./routes/primaryCategoryRoutes");
 const secondaryCategoryRoutes = require("./routes/secondaryCategoryRoutes");
 const tertiaryCategoryRoutes = require("./routes/tertiaryCategoryRoutes");
 const productRoutes = require("./routes/productRoutes");
+const cartRoutes = require("./routes/cartRoutes");
 
 
 app.use('/api/auth', authRoutes);
@@ -41,6 +42,7 @@ app.use("/api/primary-categories", primaryCategoryRoutes);
 app.use("/api/secondary-categories", secondaryCategoryRoutes);
 app.use("/api/tertiary-categories", tertiaryCategoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes);
 
 
 
